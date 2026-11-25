@@ -1,0 +1,8 @@
+streamlit
+pandas
+altair
+# Market data: BigQuery on Streamlit Cloud, local DuckDB file when developing
+google-cloud-bigquery
+db-dtypes
+pyarrow
+duckdb
