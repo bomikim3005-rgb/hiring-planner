@@ -64,15 +64,31 @@ def ranked_bar(df: pd.DataFrame, value: str, label: str, title: str, fmt: str = 
 
 # ------------------------------------------------------------ market data
 
+def secret(name: str):
+    """An environment variable, or else a top-level Streamlit secret (None if neither)."""
+    if os.getenv(name):
+        return os.getenv(name)
+    try:
+        return st.secrets.get(name)
+    except Exception:  # no secrets.toml, e.g. when running locally
+        return None
+
+
+def service_account_info(key) -> dict:
+    """GCP_SA_KEY as a dict, whether it's a JSON string or a TOML table."""
+    return json.loads(key) if isinstance(key, str) else dict(key)
+
+
 @st.cache_data(ttl=900, show_spinner="Loading market data...")
 def load_marts():
     """Return ({name: DataFrame}, source label), or (None, None) if not configured."""
-    project, key = os.getenv("BQ_PROJECT"), os.getenv("GCP_SA_KEY")
+    project, key = secret("BQ_PROJECT"), secret("GCP_SA_KEY")
     if project and key:
         from google.cloud import bigquery
         from google.oauth2 import service_account
 
-        creds = service_account.Credentials.from_service_account_info(json.loads(key))
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info(key))
         client = bigquery.Client(project=project, credentials=creds)
         names = {t: f"`{project}.{BQ_DATASET}.{t}`" for t in TABLES}
         return {k: client.query(q.format(**names)).to_dataframe(create_bqstorage_client=False)
@@ -95,8 +111,10 @@ def prepared_marts():
                  "Check the BQ_PROJECT and GCP_SA_KEY secrets.")
         return None
     if data is None:
-        st.info("Not connected to market data yet. Set BQ_PROJECT and GCP_SA_KEY "
-                "for BigQuery, or run Job Posting Monitor's ./pipeline/run.sh locally "
+        missing = [n for n in ("BQ_PROJECT", "GCP_SA_KEY") if not secret(n)]
+        st.info(f"Not connected to market data yet: {' and '.join(missing)} not found. "
+                "Set both for BigQuery (at the top of the app's secrets, not under a "
+                "[section]), or run Job Posting Monitor's ./pipeline/run.sh locally "
                 "(or point JOB_MARKET_DB at its DuckDB file).")
         return None
     if data["postings"].empty:
